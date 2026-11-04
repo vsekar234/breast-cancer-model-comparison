@@ -6,6 +6,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+from matplotlib.figure import Figure
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -194,11 +195,62 @@ with selected_model_tab:
         index=pd.Index(class_names, name="Actual"),
         columns=pd.Index(class_names, name="Predicted"),
     )
-    st.dataframe(matrix_table)
+
+    # Keep explanations tied to malignant cases even when the metric switch changes.
+    benign_correct, false_alarms, missed_malignant, malignant_correct = matrix.ravel()
+    st.info(
+        f"Detected {malignant_correct} of {matrix[1].sum()} malignant cases; "
+        f"missed {missed_malignant}; flagged {false_alarms} benign cases as malignant. "
+        f"Correct predictions: {benign_correct + malignant_correct} of {matrix.sum()}."
+    )
+
+    # Cell descriptions make the counts understandable without knowing TP/TN terms.
+    cell_descriptions = [
+        ["Correctly benign", "False alarm"],
+        ["Missed malignant", "Correctly malignant"],
+    ]
+    # A standalone figure avoids desktop GUI windows in Streamlit's worker thread.
+    figure = Figure(figsize=(7, 4))
+    axis = figure.subplots()
+    image = axis.imshow(matrix, cmap="Blues", vmin=0, vmax=max(1, matrix.max()))
+    figure.colorbar(image, ax=axis, label="Number of test rows")
+    axis.set(
+        xticks=[0, 1],
+        yticks=[0, 1],
+        xticklabels=class_names,
+        yticklabels=class_names,
+        xlabel="Predicted diagnosis",
+        ylabel="Actual diagnosis",
+    )
+    for row in range(2):
+        for column in range(2):
+            axis.text(
+                column,
+                row,
+                f"{matrix[row, column]}\n{cell_descriptions[row][column]}",
+                ha="center",
+                va="center",
+                color="white" if matrix[row, column] > matrix.max() / 2 else "black",
+            )
+    figure.tight_layout()
+    st.pyplot(figure)
+
     st.caption(
         "Rows = actual class; columns = predicted class. Diagonal counts are "
-        "correct predictions; off-diagonal counts are errors."
+        "correct predictions; off-diagonal counts are errors. Darker blue means more rows, "
+        "not better performance."
     )
+    with st.expander("How to read the confusion matrix"):
+        st.markdown(
+            "- **Top left:** benign cases correctly predicted benign (true negatives).\n"
+            "- **Top right:** benign cases predicted malignant (false positives / false alarms).\n"
+            "- **Bottom left:** malignant cases predicted benign (false negatives / missed cases).\n"
+            "- **Bottom right:** malignant cases correctly predicted malignant (true positives).\n\n"
+            "These terms treat **1 = Malignant** as positive, regardless of the metric "
+            "selector above. The matrix shows counts, not probabilities."
+        )
+    with st.expander("View the exact matrix counts"):
+        st.dataframe(matrix_table)
 
     st.subheader("Classification report")
     # Per-class metrics describe each class separately, not just the positive one.
@@ -223,8 +275,23 @@ with selected_model_tab:
         "Support = actual rows per class. Macro avg weights classes equally; "
         "weighted avg weights them by support. Overall accuracy is shown above."
     )
+    with st.expander("How to read the classification report"):
+        st.markdown(
+            "Read each class separately:\n\n"
+            "- **Precision:** of the rows predicted as this class, how many were correct?\n"
+            "- **Recall:** of the actual rows in this class, how many were detected?\n"
+            "- **F1-score:** balances precision and recall using their harmonic mean.\n"
+            "- **Support:** the number of actual test rows belonging to this class.\n"
+            "- **Macro avg:** averages the two class scores with equal weight.\n"
+            "- **Weighted avg:** averages them using each class's support as its weight.\n\n"
+            "For example, **0.90 means 90%**. For the malignant row, precision is "
+            "`correctly malignant / (correctly malignant + false alarms)`; recall is "
+            "`correctly malignant / (correctly malignant + missed malignant)`. "
+            "If a denominator is zero, the undefined score is displayed as 0 with a warning."
+        )
     if (matrix.sum(axis=0) == 0).any() or (matrix.sum(axis=1) == 0).any():
         st.warning(
             "A class is absent from targets or predictions. Undefined per-class "
             "Precision, Recall, or F1 values in the report are displayed as 0."
         )
+    st.caption("Results describe the uploaded test data only. Educational use, not a clinical diagnostic tool.")
