@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 from sklearn.metrics import (
     accuracy_score,
+    classification_report,
+    confusion_matrix,
     f1_score,
     matthews_corrcoef,
     precision_score,
@@ -172,3 +174,57 @@ metrics = {
 }
 for column, (label, value) in zip(st.columns(6), metrics.items()):
     column.metric(label, "N/A" if value is None else f"{value:.4f}")
+
+# --- 11. Selected-model confusion matrix and classification report ---
+selected_model_tab = st.tabs(["Selected Model"])[0]
+with selected_model_tab:
+    st.subheader(f"Classification details: {selected_model_name}")
+    class_labels = [0, 1]
+    class_names = ["0 = Benign", "1 = Malignant"]
+    st.caption(
+        "Both classes are always shown in this order. Changing the positive "
+        "class above does not change these per-class results."
+    )
+
+    st.subheader("Confusion matrix")
+    # Fix the label order so single-class uploads still produce a 2-by-2 matrix.
+    matrix = confusion_matrix(target, predictions, labels=class_labels)
+    matrix_table = pd.DataFrame(
+        matrix,
+        index=pd.Index(class_names, name="Actual"),
+        columns=pd.Index(class_names, name="Predicted"),
+    )
+    st.dataframe(matrix_table)
+    st.caption(
+        "Rows = actual class; columns = predicted class. Diagonal counts are "
+        "correct predictions; off-diagonal counts are errors."
+    )
+
+    st.subheader("Classification report")
+    # Per-class metrics describe each class separately, not just the positive one.
+    report = classification_report(
+        target,
+        predictions,
+        labels=class_labels,
+        target_names=class_names,
+        output_dict=True,
+        zero_division=0,
+    )
+    # Overall accuracy is already displayed above; keep support meaningful here.
+    report_table = pd.DataFrame(
+        {name: scores for name, scores in report.items() if name != "accuracy"}
+    ).T
+    st.dataframe(
+        report_table.style.format(
+            {"precision": "{:.4f}", "recall": "{:.4f}", "f1-score": "{:.4f}", "support": "{:.0f}"}
+        )
+    )
+    st.caption(
+        "Support = actual rows per class. Macro avg weights classes equally; "
+        "weighted avg weights them by support. Overall accuracy is shown above."
+    )
+    if (matrix.sum(axis=0) == 0).any() or (matrix.sum(axis=1) == 0).any():
+        st.warning(
+            "A class is absent from targets or predictions. Undefined per-class "
+            "Precision, Recall, or F1 values in the report are displayed as 0."
+        )
