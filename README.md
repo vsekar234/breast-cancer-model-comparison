@@ -47,6 +47,8 @@ All metrics below were calculated on the saved notebook evaluation run on the sa
 
 The app loads the saved classifiers and scaler from `model/`, accepts a labeled test CSV, validates the required columns and values, and reports Accuracy, AUC, Precision, Recall, F1, MCC, a confusion matrix, and a classification report. It does not retrain models on uploaded data.
 
+**Live app:** [Open the Breast Cancer Model Comparison app](https://breast-cancer-model-comparison-ubzg3akmc67gg6pgwxjut8.streamlit.app/)
+
 Run locally from the project directory:
 
 ```powershell
